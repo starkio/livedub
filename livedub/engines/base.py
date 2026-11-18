@@ -165,9 +165,9 @@ class LatencyMeter:
         if self._start is None:
             self._start = time.monotonic() if t is None else t
 
-    def audio_arrived(self) -> None:
+    def audio_arrived(self, playback_delay_s: float = 0.0) -> None:
         if self._start is not None:
-            self._emit("latency", ms=int((time.monotonic() - self._start) * 1000))
+            self._emit("latency", ms=int((time.monotonic() - self._start + playback_delay_s) * 1000))
             self._start = None
 
 

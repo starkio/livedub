@@ -6,6 +6,9 @@ Bilgisayarda çalan sesi (YouTube, film, yayın, Zoom…) ya da mikrofonu **anl�
 seslendirir**. Çeviri, konuşma devam ederken akış hâlinde üretilir ve seçtiğiniz çıkışa (hoparlör,
 kulaklık ya da toplantı uygulamasına giden sanal kablo) çalınır.
 
+Arayüz dili **Ayarlar → Genel → Arayüz dili** bölümünden Türkçe, İngilizce veya Rusça olarak
+değiştirilebilir. Bu ayar, çevirinin kaynak ve hedef dillerinden bağımsızdır.
+
 ## Motorlar
 
 | Motor | Nasıl çalışır | Gecikme | Çıkış dilleri | Gereken anahtar |
@@ -13,17 +16,19 @@ kulaklık ya da toplantı uygulamasına giden sanal kablo) çalınır.
 | **Gemini Live Translate** (`gemini-3.5-live-translate-preview`) — varsayılan | Konuşmacı konuşurken eşzamanlı çevirir, ses tonunu konuşmacıya uyarlar, zaten hedef dilde olan konuşmayı tekrar etmez | En düşük (konuşmayla birlikte akar) | 70+ dil, **Türkçe dahil** | Gemini ([ücretsiz al](https://aistudio.google.com/apikey)) |
 | **OpenAI Realtime Translate** (`gpt-realtime-translate`) | Konuşmacı konuşurken eşzamanlı çevirir, ses tonunu konuşmacıya uyarlar | En düşük (konuşmayla birlikte akar) | en, es, pt, fr, ja, ru, zh, de, ko, hi, id, vi, it — **Türkçe yok** | OpenAI |
 | **OpenAI Realtime GPT** (`gpt-realtime-1.5` vb.) | Tercüman olarak yönlendirilmiş konuşma modeli; her duraksamada çevirir | Düşük (duraksamadan sonra) | Tüm diller, **Türkçe dahil** | OpenAI |
-| **Kaskad** | Deepgram canlı STT → OpenAI/DeepL çeviri → OpenAI/ElevenLabs TTS | Orta (cümle sonundan sonra) | Tüm diller, istediğiniz ses (ElevenLabs) | Deepgram + OpenAI/DeepL + OpenAI/ElevenLabs |
+| **OpenAI seçili kaynak dili** | OpenAI her konuşma parçasının dilini algılar, eşleşen metni çevirir, ardından Windows sesi veya OpenAI TTS ile seslendirir | Konuşma parçası doğrulanınca | Kurulu Windows sesine veya OpenAI TTS'ye bağlı | OpenAI |
+| **Kaskad** | Deepgram canlı STT → OpenAI/DeepL çeviri → Windows Live, OpenAI veya ElevenLabs | Konuşma bölümü doğrulanınca | Kurulu Windows sesine veya bulut modeline bağlı | Deepgram + OpenAI/DeepL. Windows Live ses anahtarı gerektirmez. |
 
-Özet: her yönde (Türkçeye ve Türkçeden) varsayılan motor **Gemini Live Translate**: eşzamanlı ve en
-ucuzu. Ücretsiz katmanda ses girişi bedava, çeviri sesi ~0,018 $/dk, yani saatte ~1 $. Ücretsiz
-katmanda gönderilen içerik Google tarafından ürün geliştirmede kullanılabilir. Karşılaştırma için OpenAI
-Realtime Translate 0,034 $/dk'dır. Özel ses ya da klon ses istiyorsanız *Kaskad* motorunu seçin.
-
-Fiyatlar Eylül 2026'daki resmi fiyat sayfalarından alınmıştır.
+**Gemini Live Translate** için tek bir Gemini anahtarı yeterlidir. **Otomatik → Rusça** modunda
+Rusça olarak tanınan konuşma seslendirilmez, diğer algılanan diller çevrilir. Yalnızca İngilizce
+konuşmaları çevirmek için **İngilizce → Rusça** seçin. OpenAI kaynak dili filtresi için tek bir OpenAI anahtarı yeterlidir.
+Güncel fiyatlar ve sınırlar için [Google](https://aistudio.google.com/docs/pricing#gemini-3.5-live-translate-preview)
+ve [OpenAI](https://developers.openai.com/api/docs/models/gpt-realtime-translate) sayfalarına bakın.
 
 Gecikmeyi düşüren ayrıntılar:
-- Ses 20 ms'lik bloklarla yakalanır, 40 ms'lik paketlerle WebSocket üzerinden akıtılır.
+- Ses 20 ms'lik bloklarla yakalanır. OpenAI Realtime Translate, modelin kullandığı tam 200 ms'lik
+  çerçeveler gönderir. Giriş sessizliğini korur ve çıkış kuyruğunda sayısal sessizliği atlar.
+  Diğer motorlar 20 veya 40 ms'lik paketler gönderir.
 - Realtime GPT'de dublaj yeni konuşma başlayınca **kesilmez**; yanıtlar sıraya alınır. Kesintisiz
   konuşmada (video, yayın) en geç *En uzun parça* süresinde (varsayılan 7 sn) çeviri tetiklenir.
 - Eski konuşma öğeleri silinir; oturum uzadıkça maliyet ve gecikme artmaz.
@@ -132,8 +137,24 @@ açılır: siz konuşursunuz, dublaj çalar, sonra tekrar konuşursunuz (sıral�
 - **Gürültü azaltma:** mikrofonda `near_field`/`far_field`, sistem sesinde kapalı bırakın.
 - **Sessizlik eşiği (Realtime GPT):** düşürmek (ör. 250 ms) gecikmeyi azaltır ama cümleleri bölebilir.
 - **Konuşma hızı:** Türkçe çeviriler genelde kaynaktan uzundur; 1.1–1.2x dublajın geride kalmasını önler.
-- **Kaskad + Deepgram:** otomatik dil algılama `nova-3` ile çalışır; belirli bir kaynak dil seçerseniz
-  o dili destekleyen modeli seçin (Türkçe kaynak için `nova-2` en garantisidir).
+- **Kaynak dili** otomatik bırakınca seçtiğiniz motor kullanılır. **İngilizce → Rusça** seçildiğinde
+  OpenAI yalnızca dili İngilizce olarak doğrulanan konuşma parçalarını çevirir. Karışık veya dili
+  bilinmeyen parçalar atlanır. Windows Rusça sesi yerel olarak üretir. Bir OpenAI anahtarı yeterlidir.
+  Deepgram anahtarıyla Kaskad seçilirse sözcük düzeyindeki filtre kullanılır.
+  Konuşmalar üst üste bindiğinde algılama zorlaşabilir.
+  Dublajın yanında karışık orijinal sesi duymak için **Orijinal ses** düzeyini artırın.
+- OpenAI kaynak dili filtresi doğrulanan parçaları bekletmeden çevirir ve duraklama eşiğini 100 ms olarak
+  ayarlar. Toplam gecikme algılama, ağ, çeviri, sentez ve ses çıkış kuyruğuna bağlıdır.
+- **Ayarlar → OpenAI motorları → Seçili kaynak dili** bölümünde metin çeviri modelini seçebilir veya
+  bir Chat Completions model kimliği yazabilirsiniz. Ayar dublaj yeniden başlatıldığında uygulanır.
+- OpenAI metin çevirisinde daha düşük maliyetli `gpt-6-luna` seçilebilir. LiveDub bu modelde akıl
+  yürütmeyi kapatır.
+- **Windows Live (ücretsiz, çevrimdışı):** **Ayarlar → Kaskad** bölümünde bu ses sağlayıcısını seçin.
+  Hedef dile uygun kurulu Windows sesini kullanır, örneğin Rusça için Microsoft Irina. Seslendirme
+  bilgisayarınızda yapılır ve API anahtarı gerekmez. OpenAI çevirisi akarken ilk bölüm seslendirilebilir.
+- **ElevenLabs Live (WebSocket):** **Ayarlar → Kaskad** bölümünde bu ses sağlayıcısını seçip ElevenLabs
+  anahtarını ve sesi ayarlayın. Varsayılan Flash v2.5 modeli Rusçayı destekler. OpenAI çevirisi
+  akarken ilk bölüm seslendirilebilir. Aynı WebSocket birden fazla parça için kullanılır.
 - Model adları düzenlenebilir alanlardır; OpenAI yeni bir model yayınladığında kod değiştirmeden
   kullanabilirsiniz.
 
@@ -145,14 +166,16 @@ Ayarlar ve anahtarlar `~/.livedub/settings.json` dosyasında **düz metin** sakl
 python -m livedub --list-devices
 python -m livedub --test-audio --source "lb:{...}" --output "out:Hoparlör (Realtek(R) Audio)"
 python -m livedub --headless --engine realtime --target tr --source "in:CABLE Output (VB-Audio Virtual Cable)"
+python -m livedub --headless --source lb:system --source-lang en --target ru
 ```
 
 ## Testler
 
 ```bash
 python tests/mock_engines.py
+python tests/gui_localization.py
 ```
-Üç motoru da yerel sahte sunuculara karşı çalıştırır (API anahtarı ve ses cihazı gerekmez).
+Motorları yerel sahte sunuculara karşı çalıştırır (API anahtarı ve ses cihazı gerekmez).
 
 ## Proje yapısı
 

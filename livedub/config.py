@@ -18,6 +18,9 @@ ENGINE_GEMINI = "gemini"  # Gemini Live Translate: simultaneous speech-to-speech
 ENGINE_TRANSLATE = "translate"  # gpt-realtime-translate: simultaneous speech-to-speech
 ENGINE_REALTIME = "realtime"  # gpt-realtime-*: prompted interpreter, any target language
 ENGINE_CASCADE = "cascade"  # Deepgram STT -> text translation -> streaming TTS
+ENGINE_OPENAI_FILTERED = "openai_filtered"  # OpenAI language detection and translation with one key
+
+OPENAI_FILTERED_TEXT_MODELS = ("gpt-5.6-luna", "gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol")
 
 
 @dataclass
@@ -66,12 +69,15 @@ class Settings:
     deepgram_endpointing_ms: int = 300
     translator: str = "openai"  # openai | deepl
     translate_text_model: str = "gpt-4.1-mini"
-    tts_provider: str = "openai"  # openai | elevenlabs
+    openai_filtered_text_model: str = OPENAI_FILTERED_TEXT_MODELS[0]
+    tts_provider: str = "openai"  # openai | elevenlabs | elevenlabs_live | windows_live
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "coral"
     elevenlabs_model: str = "eleven_flash_v2_5"
     elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
     adaptive_speed: bool = True
+
+    ui_language: str = "tr"
 
     def key(self, name: str) -> str:
         value = getattr(self, f"{name}_api_key", "")

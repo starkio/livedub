@@ -7,8 +7,8 @@ or your own microphone, **while the speaker is still talking**. The translation 
 produced and played to the output you pick: speakers, headphones, or a virtual cable that goes into
 your meeting app.
 
-> The app's interface is currently in Turkish. Labels below are quoted as they appear in the app,
-> with an English gloss.
+The desktop interface supports Turkish, English, and Russian. Select it under
+**Settings → General → Interface language**. This setting is independent of the languages you dub.
 
 ## Engines
 
@@ -17,18 +17,19 @@ your meeting app.
 | **Gemini Live Translate** (`gemini-3.5-live-translate-preview`) — default | Simultaneous translation while the speaker talks; adapts the voice to the speaker and doesn't repeat speech that is already in the target language | Lowest (flows with the speech) | 70+ languages, **including Turkish** | Gemini ([get one free](https://aistudio.google.com/apikey)) |
 | **OpenAI Realtime Translate** (`gpt-realtime-translate`) | Simultaneous translation while the speaker talks; adapts the voice to the speaker | Lowest (flows with the speech) | en, es, pt, fr, ja, ru, zh, de, ko, hi, id, vi, it — **no Turkish** | OpenAI |
 | **OpenAI Realtime GPT** (`gpt-realtime-1.5` etc.) | A speech model prompted as an interpreter; translates at every pause | Low (after a pause) | All languages, **including Turkish** | OpenAI |
-| **Cascade** | Deepgram live STT → OpenAI/DeepL translation → OpenAI/ElevenLabs TTS | Medium (after the end of a sentence) | All languages, any voice you like (ElevenLabs) | Deepgram + OpenAI/DeepL + OpenAI/ElevenLabs |
+| **OpenAI selected source** | OpenAI identifies the language of each utterance, translates matching text, then plays it using the local Windows voice or OpenAI TTS | After a confirmed utterance | Depends on the installed Windows voice or OpenAI TTS | OpenAI |
+| **Cascade** | Deepgram live STT → OpenAI/DeepL translation → Windows Live, OpenAI or ElevenLabs voice | After a confirmed speech segment | Depends on the installed Windows voice or cloud model | Deepgram + OpenAI/DeepL. Windows Live needs no TTS key. |
 
-In short: in both directions (into and out of Turkish) the default engine is **Gemini Live
-Translate** — simultaneous and the cheapest. On the free tier audio input is free and translated audio
-costs about $0.018/min, roughly $1 an hour. On the free tier, content you send may be used by Google to
-improve its products. For comparison, OpenAI Realtime Translate is $0.034/min. If you want a custom or
-cloned voice, pick *Cascade*.
-
-Prices are from the official pricing pages as of September 2026.
+**Gemini Live Translate** needs one Gemini key. In **Auto → Russian** it suppresses recognized Russian
+speech and translates any other detected language. This fits a stream containing only English and
+Russian. Select **English → Russian** to use the OpenAI source-language filter with one OpenAI key.
+Check [Google](https://aistudio.google.com/docs/pricing#gemini-3.5-live-translate-preview) and
+[OpenAI](https://developers.openai.com/api/docs/models/gpt-realtime-translate) for current pricing and limits.
 
 What keeps latency down:
-- Audio is captured in 20 ms blocks and streamed over WebSocket in 40 ms packets.
+- Audio is captured in 20 ms blocks. OpenAI Realtime Translate sends exact 200 ms frames, as required
+  by the translation model. It keeps silence on input and skips digitized silence in the playback queue.
+  Other engines send 20 or 40 ms packets.
 - In Realtime GPT the dub is **not cut off** when new speech starts; responses are queued. In continuous
   speech (videos, streams) a translation is triggered at the latest after *Longest chunk* seconds
   (7 s by default).
@@ -36,8 +37,8 @@ What keeps latency down:
 - In Cascade the translation streams token by token and TTS starts as soon as the first sentence is done.
   If the queue builds up, playback speeds up automatically.
 - If the connection drops (or the server session expires), it reconnects automatically.
-- The status bar shows live **Latency** (end/start of speech → first dubbed audio) and **Queue**
-  (dubbed audio waiting to be played).
+- The status bar shows **Latency** and **Queue** (dubbed audio waiting to be played). Cascade estimates
+  latency from the last recognized word of a segment to playback, including the audio output queue.
 
 ## Install
 
@@ -141,8 +142,28 @@ kicks in: you speak, the dub plays, then you speak again (turn-taking).
 - **Silence threshold (Realtime GPT):** lowering it (e.g. 250 ms) reduces latency but can split sentences.
 - **Speech speed:** Turkish translations tend to be longer than the source; 1.1–1.2x keeps the dub from
   falling behind.
-- **Cascade + Deepgram:** automatic language detection works with `nova-3`; if you pick a specific source
-  language, choose a model that supports it (`nova-2` is the safest for Turkish source audio).
+- **Source language** set to **Auto** uses your selected engine. Picking **English → Russian** switches
+  to the OpenAI source-language filter. OpenAI transcribes each utterance, the app accepts only
+  utterances identified as English, and Windows uses a local Russian voice. Only an OpenAI key is needed.
+  Utterances with unknown or mixed languages are skipped. Choosing Cascade and configuring Deepgram
+  uses its word-level filter instead. Detection depends on the quality of
+  the mixed audio, especially when people speak at the same time. Turn up **Original audio** to hear
+  the original mix alongside the dub.
+- OpenAI selected-language dubbing sends confirmed utterances immediately and asks OpenAI to detect
+  pauses after 100 ms of silence. The total delay depends on recognition, the network, translation, synthesis, and
+  the playback queue.
+- In **Settings → OpenAI engines → Selected source language**, choose the text-translation model
+  or enter a Chat Completions model ID. The setting takes effect when you start dubbing again.
+- For OpenAI text translation, `gpt-6-luna` is available as a lower-cost model and runs with reasoning
+  disabled in LiveDub.
+- **Windows Live (free, offline):** select it as the voice provider in **Settings → Cascade**. It
+  uses an installed Windows voice matching the target language, such as Microsoft Irina for Russian.
+  The speech generation stays on your computer and needs no API key. With streaming OpenAI
+  translation, it can start speaking a text fragment while the next part is still arriving.
+- **ElevenLabs Live (WebSocket):** select it as the voice provider in **Settings → Cascade** and set
+  your ElevenLabs key and voice. The default Flash v2.5 model supports Russian. With streaming
+  OpenAI translation, LiveDub can synthesize the first part while the rest of the translation is
+  still arriving. The WebSocket is reused across phrases.
 - Model names are editable fields, so you can use a new OpenAI model as soon as it ships, without
   changing code.
 
@@ -154,12 +175,14 @@ Settings and keys are stored **in plain text** in `~/.livedub/settings.json`.
 python -m livedub --list-devices
 python -m livedub --test-audio --source "lb:{...}" --output "out:Speakers (Realtek(R) Audio)"
 python -m livedub --headless --engine realtime --target tr --source "in:CABLE Output (VB-Audio Virtual Cable)"
+python -m livedub --headless --source lb:system --source-lang en --target ru
 ```
 
 ## Tests
 
 ```bash
 python tests/mock_engines.py
+python tests/gui_localization.py
 ```
 Runs the engines against local fake servers (no API keys or audio devices needed).
 

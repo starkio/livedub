@@ -19,7 +19,8 @@ from ..languages import TRANSLATE_MODEL_OUTPUTS, display_name
 from .base import Engine, LatencyMeter, OnsetDetector, error_text, require_key, ws_connect
 
 URL = "wss://api.openai.com/v1/realtime/translations?model={model}"
-SEND_MS = 40
+SEND_MS = 200  # The translation endpoint buffers input until a full 200 ms frame is available.
+AUDIBLE_THRESHOLD = 10 ** (-45 / 20)
 
 
 class OpenAITranslateEngine(Engine):
@@ -33,8 +34,6 @@ class OpenAITranslateEngine(Engine):
                 text=f"{display_name(self.s.target_lang)} bu modelin desteklediği çıkış dilleri arasında değil; "
                 "sonuç alamazsanız 'OpenAI Realtime' motorunu seçin.",
             )
-        self._latency = LatencyMeter(self.emit)
-        self._onset = OnsetDetector()
         await self.reconnecting(lambda: self._session(audio), audio)
 
     def _session_config(self, with_transcription: bool) -> dict:
@@ -49,6 +48,9 @@ class OpenAITranslateEngine(Engine):
         return {"type": "session.update", "session": {"audio": audio_cfg}}
 
     async def _session(self, audio: asyncio.Queue[np.ndarray]) -> None:
+        self._latency = LatencyMeter(self.emit)
+        self._onset = OnsetDetector()
+        self._output_active = False
         url = URL.format(model=quote(self.s.translate_model))
         async with ws_connect(url, {"Authorization": f"Bearer {self._key}"}) as ws:
             await ws.send(json.dumps(self._session_config(False)))
@@ -63,31 +65,45 @@ class OpenAITranslateEngine(Engine):
                         return
             finally:
                 pump.cancel()
+                await asyncio.gather(pump, return_exceptions=True)
 
     async def _pump(self, ws, audio: asyncio.Queue[np.ndarray]) -> None:
-        min_samples = self.input_rate * SEND_MS // 1000
-        pending: list[np.ndarray] = []
-        size = 0
+        frame_bytes = self.input_rate * SEND_MS // 1000 * 2
+        pending = bytearray()
         while True:
             chunk = await audio.get()
             # Only time onsets that start while nothing is being dubbed; otherwise the reading
             # measures leftover audio of the previous sentence.
             if self._onset.feed(chunk) and not self.player.speaking:
                 self._latency.mark()
-            pending.append(chunk)
-            size += len(chunk)
-            if size < min_samples:
-                continue
-            payload = base64.b64encode(f32_to_pcm16(np.concatenate(pending))).decode("ascii")
-            pending.clear()
-            size = 0
-            await ws.send(json.dumps({"type": "session.input_audio_buffer.append", "audio": payload}))
+            pending.extend(f32_to_pcm16(chunk))
+            while len(pending) >= frame_bytes:
+                payload = base64.b64encode(pending[:frame_bytes]).decode("ascii")
+                del pending[:frame_bytes]
+                await ws.send(json.dumps({"type": "session.input_audio_buffer.append", "audio": payload}))
 
     def _handle(self, ev: dict) -> bool:
         kind = ev.get("type", "")
         if kind == "session.output_audio.delta":
-            self.player.play(pcm16_to_f32(base64.b64decode(ev["delta"])), 24000)
-            self._latency.audio_arrived()
+            samples = pcm16_to_f32(base64.b64decode(ev["delta"]))
+            if not len(samples):
+                return False
+            nonzero = samples != 0
+            if not nonzero.any():
+                if self._output_active:
+                    # The output resampler needs a short tail to emit the end of the preceding speech.
+                    self.player.play(samples[:self.input_rate // 50], self.input_rate)
+                    self._output_active = False
+                return False
+            self._output_active = True
+            if not self.player.backlog:
+                # The device already outputs silence when the queue is empty. Keep 10 ms before speech.
+                pre_roll = self.input_rate // 100
+                samples = samples[max(0, int(nonzero.argmax()) - pre_roll):]
+            audible = np.flatnonzero(np.abs(samples) >= AUDIBLE_THRESHOLD)
+            delay = self.player.play(samples, self.input_rate)
+            if delay is not None and len(audible):
+                self._latency.audio_arrived(delay + audible[0] / self.input_rate)
         elif kind == "session.output_transcript.delta":
             self.emit("target_delta", text=ev.get("delta", ""))
         elif kind == "session.input_transcript.delta":

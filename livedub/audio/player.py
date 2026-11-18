@@ -54,12 +54,17 @@ class Player:
         )
 
     # -- producer side -------------------------------------------------------------------------
-    def play(self, samples: np.ndarray, rate: int) -> None:
-        """Queue dubbed speech. Called from the engine (single) thread."""
+    def play(self, samples: np.ndarray, rate: int) -> float | None:
+        """Queue dubbed speech and estimate seconds until its first sample plays."""
         rs = self._dub_resamplers.get(rate)
         if rs is None:
             rs = self._dub_resamplers[rate] = StreamResampler(rate, self.rate)
-        self._dub.push(self._trim_pauses(rs(samples)))
+        samples = self._trim_pauses(rs(samples))
+        if not len(samples):
+            return None
+        delay = self.backlog + self._stream.latency
+        self._dub.push(samples)
+        return delay
 
     def _trim_pauses(self, x: np.ndarray) -> np.ndarray:
         """While behind, keep at most KEEP_PAUSE_S of every silent stretch in the dub."""

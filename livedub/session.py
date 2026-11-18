@@ -29,7 +29,7 @@ from .audio.macos import microphone_permission
 from .audio.player import Player
 from .audio.util import StreamResampler, rms_dbfs
 from .config import Settings
-from .engines import ENGINES, FatalEngineError
+from .engines import ENGINES, FatalEngineError, effective_engine
 
 EventSink = Callable[[str, dict], None]
 
@@ -182,7 +182,7 @@ class DubSession:
             ducker = OriginalDucker(s.original_volume)
             self._ducker = ducker
         player = Player(play_on, s.dub_volume, 0.0 if ducker else s.original_volume, s.duck_level)
-        engine = None if self._test_mode else ENGINES[s.engine](s, player, self.emit)
+        engine = None if self._test_mode else ENGINES[effective_engine(s)](s, player, self.emit)
         engine_rate = engine.input_rate if engine else 24000
         audio_q: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=QUEUE_MAX_BLOCKS)
 
